@@ -12,13 +12,22 @@ where
 }
 
 /// LIB
-#[derive(Default, Debug)]
+#[derive(Default, Debug)] // Remove Clone from derive
 pub struct Lib {
   /// Lib path
   lib_path: PathBuf,
   /// Lib
   lib: Option<Library>,
 }
+
+impl Clone for Lib {
+  fn clone(&self) -> Self {
+    // Create a new instance with the same path
+    // This will load a fresh copy of the library
+    Self::new(self.lib_path.clone())
+  }
+}
+
 unsafe impl Send for Lib {}
 unsafe impl Sync for Lib {}
 impl Lib {
@@ -43,17 +52,11 @@ impl Lib {
 impl Lib {
   /// 强制解包
   pub fn get(&self) -> &Library {
-    self
-      .lib
-      .as_ref()
-      .expect(&format!("{} 链接库无法找到", self.lib_path.display(),))
+    self.lib.as_ref().expect(&format!("{} 链接库无法找到", self.lib_path.display(),))
   }
   /// 强制解包可变
   pub fn get_mut(&mut self) -> &mut Library {
-    self
-      .lib
-      .as_mut()
-      .expect(&format!("{} 链接库无法找到", self.lib_path.display(),))
+    self.lib.as_mut().expect(&format!("{} 链接库无法找到", self.lib_path.display(),))
   }
   /// 获取路径
   pub fn get_path(&self) -> PathBuf {
