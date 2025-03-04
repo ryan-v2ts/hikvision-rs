@@ -36,7 +36,7 @@ pub type UIntmaxT = u64;
 
 /// GigE设备信息
 #[repr(C)]
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct MvGigeDeviceInfo {
   /// IP配置选项
   pub nIpCfgOption: c_uint,
@@ -65,10 +65,29 @@ pub struct MvGigeDeviceInfo {
   /// 保留字节
   pub nReserved: [c_uint; 4],
 }
+impl Default for MvGigeDeviceInfo {
+  fn default() -> Self {
+    Self {
+      nIpCfgOption: 0,
+      nIpCfgCurrent: 0,
+      nCurrentIp: 0,
+      nCurrentSubNetMask: 0,
+      nDefaultGateWay: 0,
+      chManufacturerName: [0; 32],
+      chModelName: [0; 32],
+      chDeviceVersion: [0; 32],
+      chManufacturerSpecificInfo: [0; 48],
+      chSerialNumber: [0; 16],
+      chUserDefinedName: [0; 16],
+      nNetExport: 0,
+      nReserved: [0; 4],
+    }
+  }
+}
 
 /// USB设备信息
 #[repr(C)]
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct MvUsb3DeviceInfo {
   /// 控制输入端点
   pub CtrlInEndPoint: c_uchar,
@@ -107,10 +126,34 @@ pub struct MvUsb3DeviceInfo {
   /// 保留字节
   pub nReserved: [c_uint; 2],
 }
+impl Default for MvUsb3DeviceInfo {
+  fn default() -> Self {
+    Self {
+      CtrlInEndPoint: 0,
+      CtrlOutEndPoint: 0,
+      StreamEndPoint: 0,
+      EventEndPoint: 0,
+      idVendor: 0,
+      idProduct: 0,
+      nDeviceNumber: 0,
+      chDeviceGUID: [0; INFO_MAX_BUFFER_SIZE],
+      chVendorName: [0; INFO_MAX_BUFFER_SIZE],
+      chModelName: [0; INFO_MAX_BUFFER_SIZE],
+      chFamilyName: [0; INFO_MAX_BUFFER_SIZE],
+      chDeviceVersion: [0; INFO_MAX_BUFFER_SIZE],
+      chManufacturerName: [0; INFO_MAX_BUFFER_SIZE],
+      chSerialNumber: [0; INFO_MAX_BUFFER_SIZE],
+      chUserDefinedName: [0; INFO_MAX_BUFFER_SIZE],
+      nbcdUSB: 0,
+      nDeviceAddress: 0,
+      nReserved: [0; 2],
+    }
+  }
+}
 
 /// CameraLink设备信息
 #[repr(C)]
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct MvCamLDeviceInfo {
   /// 端口号
   pub chPortID: [c_uchar; INFO_MAX_BUFFER_SIZE],
@@ -127,6 +170,19 @@ pub struct MvCamLDeviceInfo {
   /// 保留字节
   pub nReserved: [c_uint; 38],
 }
+impl Default for MvCamLDeviceInfo {
+  fn default() -> Self {
+    Self {
+      chPortID: [0; INFO_MAX_BUFFER_SIZE],
+      chModelName: [0; INFO_MAX_BUFFER_SIZE],
+      chFamilyName: [0; INFO_MAX_BUFFER_SIZE],
+      chDeviceVersion: [0; INFO_MAX_BUFFER_SIZE],
+      chManufacturerName: [0; INFO_MAX_BUFFER_SIZE],
+      chSerialNumber: [0; INFO_MAX_BUFFER_SIZE],
+      nReserved: [0; 38],
+    }
+  }
+}
 
 /// 不同设备特有信息
 #[repr(C)]
@@ -134,6 +190,35 @@ pub union N19MvCCDeviceInfo3Dot0E {
   pub stGigEInfo: ManuallyDrop<MvGigeDeviceInfo>,
   pub stUsb3VInfo: ManuallyDrop<MvUsb3DeviceInfo>,
   pub stCamLInfo: ManuallyDrop<MvCamLDeviceInfo>,
+}
+impl Clone for N19MvCCDeviceInfo3Dot0E {
+  fn clone(&self) -> Self {
+    unsafe {
+      // Since this is a union, we need to be careful about which field we access.
+      // We'll clone based on checking the nTLayerType field of the parent struct.
+      let parent_ptr = (self as *const _ as usize - std::mem::size_of::<c_uint>() * 5) as *const MvCcDeviceInfo;
+      match (*parent_ptr).nTLayerType {
+        x if x == MV_GIGE_DEVICE as u32 => Self {
+          stGigEInfo: ManuallyDrop::new(ManuallyDrop::into_inner(self.stGigEInfo.clone())),
+        },
+        x if x == MV_USB_DEVICE as u32 => Self {
+          stUsb3VInfo: ManuallyDrop::new(ManuallyDrop::into_inner(self.stUsb3VInfo.clone())),
+        },
+        x if x == MV_CAMERALINK_DEVICE as u32 => Self {
+          stCamLInfo: ManuallyDrop::new(ManuallyDrop::into_inner(self.stCamLInfo.clone())),
+        },
+        _ => {
+          // Handle unknown nTLayerType gracefully. Return a default value or log an error.
+          // Returning a default N19MvCCDeviceInfo3Dot0E is a safe option.
+          // Log an error for debugging purposes.
+          eprintln!("Warning: Unknown nTLayerType encountered during cloning. Returning default N19MvCCDeviceInfo3Dot0E.");
+          Self {
+            stUsb3VInfo: ManuallyDrop::new(ManuallyDrop::into_inner(self.stUsb3VInfo.clone())), // Or any other default variant
+          }
+        }
+      }
+    }
+  }
 }
 
 /// 设备信息    \~english Device info
@@ -154,19 +239,32 @@ pub struct MvCcDeviceInfo {
   /// 不同设备特有信息
   pub SpecialInfo: N19MvCCDeviceInfo3Dot0E,
 }
+impl Clone for MvCcDeviceInfo {
+  fn clone(&self) -> Self {
+    Self {
+      nMajorVer: self.nMajorVer,
+      nMinorVer: self.nMinorVer,
+      nMacAddrHigh: self.nMacAddrHigh,
+      nMacAddrLow: self.nMacAddrLow,
+      nTLayerType: self.nTLayerType,
+      nReserved: self.nReserved,
+      SpecialInfo: self.SpecialInfo.clone(),
+    }
+  }
+}
 
 /// # 设备的访问模式
 /// ```text
 /// 参数
-/// pstDevInfo [IN] 设备信息结构体  
+/// pstDevInfo [IN] 设备信息结构体
 /// nAccessMode [IN] 访问权限
-/// MV_ACCESS_Exclusive  1  独占权限，其他APP只允许读CCP寄存器  
-/// MV_ACCESS_ExclusiveWithSwitch  2  可以从5模式下抢占权限，然后以独占权限打开  
-/// MV_ACCESS_Control  3  控制权限，其他APP允许读所有寄存器  
-/// MV_ACCESS_ControlWithSwitch  4  可以从5的模式下抢占权限，然后以控制权限打开  
-/// MV_ACCESS_ControlSwitchEnable  5  以可被抢占的控制权限打开  
-/// MV_ACCESS_ControlSwitchEnableWithKey  6  可以从5的模式下抢占权限，然后以可被抢占的控制权限打开  
-/// MV_ACCESS_Monitor  7  读模式打开设备，适用于控制权限下  
+/// MV_ACCESS_Exclusive  1  独占权限，其他APP只允许读CCP寄存器
+/// MV_ACCESS_ExclusiveWithSwitch  2  可以从5模式下抢占权限，然后以独占权限打开
+/// MV_ACCESS_Control  3  控制权限，其他APP允许读所有寄存器
+/// MV_ACCESS_ControlWithSwitch  4  可以从5的模式下抢占权限，然后以控制权限打开
+/// MV_ACCESS_ControlSwitchEnable  5  以可被抢占的控制权限打开
+/// MV_ACCESS_ControlSwitchEnableWithKey  6  可以从5的模式下抢占权限，然后以可被抢占的控制权限打开
+/// MV_ACCESS_Monitor  7  读模式打开设备，适用于控制权限下
 /// ```
 #[repr(u8)]
 #[derive(Debug, Deserialize, Serialize)]
@@ -924,9 +1022,5 @@ pub struct MvCcStringValue {
   pub nReserved: [c_uint; 2],
 }
 
-/// # cbOutput [IN] 回调函数指针  
-pub type CbOutputCallback = extern "C" fn(
-  pData: *const c_uchar,
-  pstFrameInfo: *const MvFrameOutInfoEx,
-  pUser: *const c_void,
-) -> c_void;
+/// # cbOutput [IN] 回调函数指针
+pub type CbOutputCallback = extern "C" fn(pData: *const c_uchar, pstFrameInfo: *const MvFrameOutInfoEx, pUser: *const c_void) -> c_void;
